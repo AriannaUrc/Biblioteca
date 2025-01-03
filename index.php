@@ -2,10 +2,6 @@
 session_start();
 include 'db_connection.php';
 
-// Hardcoded admin credentials
-define('ADMIN_USERNAME', 'admin');
-define('ADMIN_PASSWORD', 'adminpass');
-
 // Logout functionality
 if (isset($_POST['logout'])) {
     session_unset();
@@ -14,352 +10,430 @@ if (isset($_POST['logout'])) {
     exit;
 }
 
-// Admin login check
-if (isset($_POST['login'])) {
-    $username = $_POST['login_username'];
-    $password = $_POST['login_password'];
 
-    // Check if the credentials match the hardcoded admin ones
-    if ($username == ADMIN_USERNAME && $password == ADMIN_PASSWORD) {
-        $_SESSION['role'] = 'admin';
-        $_SESSION['username'] = $username;
-        $_SESSION['logged_in'] = true;
-        header("Location: index.php"); // Redirect to avoid form resubmission
-        exit;
-    } else {
-        // Check if it's a normal user login
-        $query = "SELECT * FROM users WHERE username = '$username'";
-        $result = mysqli_query($conn, $query);
-        $user = mysqli_fetch_assoc($result);
-
-        if ($user && password_verify($password, $user['password'])) {
-            $_SESSION['role'] = $user['role'];
-            $_SESSION['user_id'] = $user['user_id'];
-            $_SESSION['username'] = $user['username'];
-            $_SESSION['logged_in'] = true;
-            header("Location: index.php"); // Redirect to avoid form resubmission
-            exit;
-        } else {
-            echo "Invalid credentials. Please try again.<br>";
-        }
-    }
-}
-
-// User registration (for normal users)
-if (isset($_POST['register'])) {
-    $username = $_POST['username'];
-    $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
-    $role = 'user'; // Default role for users
-
-    // Check if the username already exists
-    $query = "SELECT * FROM users WHERE username = ?";
-    $stmt = $conn->prepare($query);
-    $stmt->bind_param("s", $username);
-    $stmt->execute();
-    $result = $stmt->get_result();
-
-    // If a row is found with the same username, show an error message
-    if ($result->num_rows > 0) {
-        echo "There is already a user with this name.";
-    } else {
-        $query = "INSERT INTO users (username, password, role) VALUES ('$username', '$password', '$role')";
-        if (mysqli_query($conn, $query)) {
-            echo "User registered successfully.<br>";
-        } else {
-            echo "Error: " . mysqli_error($conn) . "<br>";
-        }
-    }
-}
-
-// Admin can add new books, authors, genres, and see lended books
-if (isset($_POST['add_book']) && isset($_SESSION['role']) && $_SESSION['role'] == 'admin') {
-    $title = $_POST['book_title'];
-    $author_id = $_POST['author_id'];
-    $category_id = $_POST['category_id'];
-
-    $query = "INSERT INTO books (title, author_id, category_id) VALUES ('$title', '$author_id', '$category_id')";
-    if (mysqli_query($conn, $query)) {
-        echo "Book added successfully.<br>";
-    } else {
-        echo "Error: " . mysqli_error($conn) . "<br>";
-    }
-}
-
-if (isset($_POST['add_author']) && isset($_SESSION['role']) && $_SESSION['role'] == 'admin') {
-    $author_name = $_POST['author_name'];
-
-    $query = "INSERT INTO authors (name) VALUES ('$author_name')";
-    if (mysqli_query($conn, $query)) {
-        echo "Author added successfully.<br>";
-    } else {
-        echo "Error: " . mysqli_error($conn) . "<br>";
-    }
-}
-
-if (isset($_POST['add_category']) && isset($_SESSION['role']) && $_SESSION['role'] == 'admin') {
-    $category_name = $_POST['category_name'];
-
-    $query = "INSERT INTO categories (name) VALUES ('$category_name')";
-    if (mysqli_query($conn, $query)) {
-        echo "Category added successfully.<br>";
-    } else {
-        echo "Error: " . mysqli_error($conn) . "<br>";
-    }
+if(!isset($_SESSION["role"])){
+    header("Location: login.php");
+    exit;
 }
 
 
-// User requests a book with a search filter
-if (isset($_POST['request_book']) && $_SESSION['role'] == 'user') {
-    $book_id = $_POST['book_id'];
-    $user_id = $_SESSION['user_id'];
+if ($_SESSION["role"] == 'admin') {
+    ?>
+    .Admin account<br><br>
 
-    // Check if the user is suspended
-    $suspensionQuery = "SELECT * FROM suspensions WHERE user_id = $user_id AND suspended_until > NOW()";
-    $suspensionResult = mysqli_query($conn, $suspensionQuery);
-    if (mysqli_num_rows($suspensionResult) > 0) {
-        echo "Your account is suspended. You cannot borrow books.<br>";
-    } else {
-        // Check if the book is available
-        $bookQuery = "SELECT * FROM books WHERE book_id = $book_id AND available = 1";
-        $bookResult = mysqli_query($conn, $bookQuery);
-        if (mysqli_num_rows($bookResult) > 0) {
-            // Lend the book
-            $lendDate = date('Y-m-d');
-            $lendQuery = "INSERT INTO lending (user_id, book_id, lend_date) VALUES ($user_id, $book_id, '$lendDate')";
-            mysqli_query($conn, $lendQuery);
 
-            // Update book availability
-            $updateBookQuery = "UPDATE books SET available = 0 WHERE book_id = $book_id";
-            mysqli_query($conn, $updateBookQuery);
+<?php
+    // Pagination for user transactions
+    $limit = 5;
+    $page = isset($_GET['page']) ? $_GET['page'] : 1;
+    $offset = ($page - 1) * $limit;
 
-            echo "Book requested successfully.<br>";
-        } else {
-            echo "This book is not available.<br>";
-        }
-    }
-}
-
-// User returns a book with a search filter
-if (isset($_POST['return_book']) && $_SESSION['role'] == 'user') {
-    $lending_id = $_POST['lending_id'];
-    $user_id = $_SESSION['user_id'];
-    $return_date = date('Y-m-d');
-
-    // Update lending record with return date
-    $query = "UPDATE lending SET return_date = '$return_date' WHERE lending_id = $lending_id AND user_id = $user_id";
-    if (mysqli_query($conn, $query)) {
-        // Get the lending record
-        $lendQuery = "SELECT * FROM lending WHERE lending_id = $lending_id";
-        $result = mysqli_query($conn, $lendQuery);
-        $lendRecord = mysqli_fetch_assoc($result);
-
-        // Calculate overdue days if any
-        $lend_date = new DateTime($lendRecord['lend_date']);
-        $return_date_obj = new DateTime($return_date);
-        $interval = $lend_date->diff($return_date_obj);
-        $daysOverdue = $interval->days;
-
-        // If overdue more than 30 days, suspend the user
-        if ($daysOverdue > 30) {
-            $suspend_days = $daysOverdue * 2;
-            $suspend_query = "INSERT INTO suspensions (user_id, suspended_until) VALUES ('{$lendRecord['user_id']}', DATE_ADD(CURRENT_DATE, INTERVAL $suspend_days DAY))";
-            mysqli_query($conn, $suspend_query);
-            echo "Your account has been suspended for $suspend_days days due to overdue books.<br>";
-        }
-
-        // Mark the book as available
-        $updateBookQuery = "UPDATE books SET available = 1 WHERE book_id = {$lendRecord['book_id']}";
-        mysqli_query($conn, $updateBookQuery);
-
-        echo "Book returned successfully.<br>";
-    } else {
-        echo "Error returning book.<br>";
-    }
-}
-
-// Pagination for books
-$limit = 5;
-$page = isset($_GET['page']) ? $_GET['page'] : 1;
-$offset = ($page - 1) * $limit;
-
-// Get available books with pagination
-$search_query = '';
-if (isset($_POST['search_books'])) {
-    $search_query = $_POST['search_books'];
-    $bookQuery = "SELECT * FROM books WHERE title LIKE '%$search_query%' AND available = 1 LIMIT $limit OFFSET $offset";
-} else {
-    $bookQuery = "SELECT * FROM books WHERE available = 1 LIMIT $limit OFFSET $offset";
-}
-
-$bookResult = mysqli_query($conn, $bookQuery);
-
-// Admin can view all books lended by users
-if (isset($_GET['view_user_books']) && isset($_SESSION['role']) && $_SESSION['role'] == 'admin') {
-    $user_id = $_GET['view_user_books'];
-    $lendedQuery = "SELECT books.title, lending.lend_date, lending.return_date 
-                    FROM lending
-                    JOIN books ON lending.book_id = books.book_id
-                    WHERE lending.user_id = $user_id";
-    $lendedResult = mysqli_query($conn, $lendedQuery);
-
-    echo "<h3>Lended Books for User ID $user_id</h3>";
-    while ($lendedBook = mysqli_fetch_assoc($lendedResult)) {
-        echo "Book: " . $lendedBook['title'] . "<br>";
-        echo "Lend Date: " . $lendedBook['lend_date'] . "<br>";
-        echo "Return Date: " . $lendedBook['return_date'] . "<br><br>";
-    }
-}
-
-// Admin view: list all users
-if (isset($_SESSION['role']) && $_SESSION['role'] == 'admin') {
+    // Fetch users
     $usersQuery = "SELECT * FROM users";
     $usersResult = mysqli_query($conn, $usersQuery);
 
+    // Define $user_id only if the user clicks on a specific user
+    if (isset($_GET['view_user_books'])) {
+        $user_id = $_GET['view_user_books'];
+
+        // Fetch user transactions for admin
+        $transactionsQuery = "SELECT * FROM lending 
+                            JOIN books ON lending.book_id = books.book_id 
+                            WHERE lending.user_id = $user_id 
+                            ORDER BY lending.lend_date DESC 
+                            LIMIT $limit OFFSET $offset";
+        $transactionsResult = mysqli_query($conn, $transactionsQuery);
+
+        // Pagination for user transactions
+        $totalTransactionsQuery = "SELECT COUNT(*) as total FROM lending WHERE user_id = $user_id";
+        $totalTransactionsResult = mysqli_query($conn, $totalTransactionsQuery);
+        $totalTransactionsRow = mysqli_fetch_assoc($totalTransactionsResult);
+        $totalTransactions = $totalTransactionsRow['total'];
+        $totalPages = ceil($totalTransactions / $limit);
+    }
+
+    // Start the page structure with Bootstrap container
+    echo '<!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Admin Panel</title>
+        <!-- Bootstrap CSS -->
+        <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    </head>
+    <body>';
+
+    // Start the page layout with Bootstrap container
+    echo '<div class="container">';
+    echo '<div class="row">';
+
+    // Left Panel: List of Users
+    echo '<div class="col-md-3 mb-4">';
+    echo "<h4>Users</h4>";
     while ($user = mysqli_fetch_assoc($usersResult)) {
-        echo "User: " . $user['username'] . "<br>";
-        echo '<form method="GET" style="display:inline;">
-                <input type="hidden" name="view_user_books" value="' . $user['user_id'] . '">
-                <button type="submit">View Lended Books</button>
-              </form><br>';
+        echo "<a href='index.php?view_user_books=" . $user['user_id'] . "' class='btn btn-link'>" . $user['username'] . "</a><br>";
     }
-}
+    echo "</div>";
 
+    // Right Panel: User Transactions & Admin Options
+    echo '<div class="col-md-9">';
+    if (isset($user_id)) { // Ensure that user_id is set before proceeding
+        // Fetch user details
+        $userQuery = "SELECT * FROM users WHERE user_id = $user_id";
+        $userDetailsResult = mysqli_query($conn, $userQuery);
+        $userDetails = mysqli_fetch_assoc($userDetailsResult);
+        echo "<h3>User: " . $userDetails['username'] . "</h3>";
 
+        // Check if user is suspended
+        $suspensionQuery = "SELECT * FROM suspensions WHERE user_id = $user_id AND suspended_until > NOW()";
+        $suspensionResult = mysqli_query($conn, $suspensionQuery);
+        $isSuspended = mysqli_num_rows($suspensionResult) > 0 ? "Suspended" : "Active";
+        echo "<p>Status: " . $isSuspended . "</p>";
 
+        // Display transactions
+        echo "<h4>Transactions</h4>";
+        if (mysqli_num_rows($transactionsResult) > 0) {
+            while ($transaction = mysqli_fetch_assoc($transactionsResult)) {
+                echo "<strong>Book:</strong> " . $transaction['title'] . "<br>";
+                echo "<strong>Lend Date:</strong> " . $transaction['lend_date'] . "<br>";
+                echo "<strong>Return Date:</strong> " . ($transaction['return_date'] ? $transaction['return_date'] : "Not yet returned") . "<br><br>";
+            }
+        } else {
+            echo "<p>No transactions found for this user.</p>";
+        }
 
+        // Pagination buttons
+        echo "<div class='mt-3'>";
+        if ($page > 1) {
+            echo "<a href='index.php?view_user_books=$user_id&page=" . ($page - 1) . "' class='btn btn-secondary'>Previous</a> ";
+        }
+        if ($page < $totalPages) {
+            echo "<a href='index.php?view_user_books=$user_id&page=" . ($page + 1) . "' class='btn btn-secondary'>Next</a>";
+        }
+        echo "</div>";
+    }
 
-// Show Login/Register form if the user is not logged in
-if (!isset($_SESSION['role'])) {
-    // Login or registration form
-    echo '
-    <h3>Register</h3>
+   
+
+    // End the right panel
+    echo "</div>"; // End of right panel
+    echo "</div>"; // End of row
+
+     // Add new book form
+     echo "<h4 class='mt-5'>Add New Book</h4>";
+     echo '
+     <form method="POST" class="form-inline">
+         <input type="text" name="book_title" placeholder="Book Title" required class="form-control mr-2">
+         <select name="author_id" class="form-control mr-2">
+             <option value="">Select Author</option>';
+     $authors = mysqli_query($conn, "SELECT * FROM authors");
+     while ($author = mysqli_fetch_assoc($authors)) {
+         echo '<option value="' . $author['author_id'] . '">' . $author['name'] . '</option>';
+     }
+     echo '</select>
+         <select name="category_id" class="form-control mr-2">
+             <option value="">Select Genre</option>';
+     $categories = mysqli_query($conn, "SELECT * FROM categories");
+     while ($category = mysqli_fetch_assoc($categories)) {
+         echo '<option value="' . $category['category_id'] . '">' . $category['name'] . '</option>';
+     }
+     echo '</select>
+         <button type="submit" name="add_book" class="btn btn-primary">Add Book</button>
+     </form>';
+ 
+     // Add new category form
+     echo "<h4 class='mt-5'>Add New Category</h4>";
+     echo '
+     <form method="POST" class="form-inline">
+         <input type="text" name="category_name" placeholder="Category Name" required class="form-control mr-2">
+         <button type="submit" name="add_category" class="btn btn-primary">Add Category</button>
+     </form>
+     
+     <h4 class="mt-5">Add New Author</h4>
+    
+     <form method="POST" class="form-inline">
+         <input type="text" name="author_name" placeholder="Author Name" required class="form-control mr-2">
+         <button type="submit" name="add_author" class="btn btn-primary">Add Author</button>
+     </form>
+     ';
+ 
+     // Add new book functionality
+     if (isset($_POST['add_book'])) {
+         $title = $_POST['book_title'];
+         $author_id = $_POST['author_id'];
+         $category_id = $_POST['category_id'];
+         $query = "INSERT INTO books (title, author_id, category_id) VALUES ('$title', '$author_id', '$category_id')";
+         if (mysqli_query($conn, $query)) {
+             echo "<div class='alert alert-success mt-3'>Book added successfully.</div>";
+         } else {
+             echo "<div class='alert alert-danger mt-3'>Error: " . mysqli_error($conn) . "</div>";
+         }
+     }
+ 
+     // Add new category functionality
+     if (isset($_POST['add_category'])) {
+         $category_name = $_POST['category_name'];
+         $query = "INSERT INTO categories (name) VALUES ('$category_name')";
+         if (mysqli_query($conn, $query)) {
+             echo "<div class='alert alert-success mt-3'>Category added successfully.</div>";
+         } else {
+             echo "<div class='alert alert-danger mt-3'>Error: " . mysqli_error($conn) . "</div>";
+         }
+     }
+
+     // Add new author functionality
+    if (isset($_POST['add_author'])) {
+        $author_name = $_POST['author_name'];
+        $query = "INSERT INTO authors (name) VALUES ('$author_name')";
+        if (mysqli_query($conn, $query)) {
+            echo "<div class='alert alert-success mt-3'>Author added successfully.</div>";
+        } else {
+            echo "<div class='alert alert-danger mt-3'>Error: " . mysqli_error($conn) . "</div>";
+        }
+    }
+
+     ?>
+
+    
+    <br><br>
     <form method="POST">
-        <input type="text" name="username" placeholder="Username" required>
-        <input type="password" name="password" placeholder="Password" required>
-        <button type="submit" name="register">Register</button>
+        <button type="submit" name="logout" class="btn btn-danger mt-3">Logout</button>
     </form>
-    <h3>Login</h3>
-    <form method="POST">
-        <input type="text" name="login_username" placeholder="Username" required>
-        <input type="password" name="login_password" placeholder="Password" required>
-        <button type="submit" name="login">Login</button>
-    </form>';
-} else {
-    // Admin or user dashboard
-    echo "Logged in as " . $_SESSION['username'] . " (" . $_SESSION['role'] . ")<br>";
+    
 
+    </div> 
 
-    // Displaying books with pagination
-    echo "<h3>Available Books</h3>";
-    while ($book = mysqli_fetch_assoc($bookResult)) {
-        echo "Book: " . $book['title'] . "<br>";
+    <?php // Bootstrap JS (Optional for things like modals, dropdowns, etc)
+    echo '<script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>';
+    echo '<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.2/dist/umd/popper.min.js"></script>';
+    echo '<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>';
 
-        // Show "Request" button for users
-        if (isset($_SESSION['role']) && $_SESSION['role'] == 'user') {
-            echo '<form method="POST">
-                    <input type="hidden" name="book_id" value="' . $book['book_id'] . '">
-                    <button type="submit" name="request_book">Request Book</button>
-                </form>';
-        }
-    }
-
-    // Pagination links
-    $totalBooksQuery = "SELECT COUNT(*) as total FROM books WHERE available = 1";
-    $totalBooksResult = mysqli_query($conn, $totalBooksQuery);
-    $totalBooksRow = mysqli_fetch_assoc($totalBooksResult);
-    $totalBooks = $totalBooksRow['total'];
-    $totalPages = ceil($totalBooks / $limit);
-
-    echo "<br><br><nav>";
-    for ($i = 1; $i <= $totalPages; $i++) {
-        echo "<a href='index.php?page=$i'>$i</a> ";
-    }
-    echo "</nav>";
-
-    // Admin dashboard
-    if ($_SESSION['role'] == 'admin') {
-        echo '<h3>Admin Dashboard</h3>';
-        // Add Book Form
-        echo '
-        <form method="POST">
-            <input type="text" name="book_title" placeholder="Book Title" required>
-            <select name="author_id">
-                <option value="">Select Author</option>';
-        
-        // Fetch authors
-        $authors = mysqli_query($conn, "SELECT * FROM authors");
-        while ($author = mysqli_fetch_assoc($authors)) {
-            echo '<option value="' . $author['author_id'] . '">' . $author['name'] . '</option>';
-        }
-        
-        echo '</select>
-            <select name="category_id">
-                <option value="">Select Genre</option>';
-        
-        // Fetch genres
-        $categories = mysqli_query($conn, "SELECT * FROM categories");
-        while ($category = mysqli_fetch_assoc($categories)) {
-            echo '<option value="' . $category['category_id'] . '">' . $category['name'] . '</option>';
-        }
-
-        echo '</select>
-            <button type="submit" name="add_book">Add Book</button>
-        </form>';
-        
-        // Add Author Form
-        echo '
-        <h3>Add New Author</h3>
-        <form method="POST">
-            <input type="text" name="author_name" placeholder="Author Name" required>
-            <button type="submit" name="add_author">Add Author</button>
-        </form>';
-        
-        // Add Genre Form
-        echo '
-        <h3>Add New Genre</h3>
-        <form method="POST">
-            <input type="text" name="category_name" placeholder="Genre Name" required>
-            <button type="submit" name="add_category">Add Genre</button>
-        </form>';
-    }
-
-    // User dashboard
-    if ($_SESSION['role'] == 'user') {
-        echo '<h3>User Dashboard</h3>';
-
-        // Search and request book form
-        echo '
-        <h4>Search for Books to Request</h4>
-        <form method="POST">
-            <input type="text" name="search_books" placeholder="Search for books" value="' . htmlspecialchars($search_query) . '">
-            <button type="submit">Search</button>
-        </form>';
-        
-        // Display available books
-        while ($book = mysqli_fetch_assoc($bookResult)) {
-            echo "Book: " . $book['title'] . "<br>";
-            echo '<form method="POST">
-                    <input type="hidden" name="book_id" value="' . $book['book_id'] . '">
-                    <button type="submit" name="request_book">Request Book</button>
-                  </form>';
-        }
-
-        // Display books user has borrowed
-        $user_books_query = "SELECT * FROM lending JOIN books ON lending.book_id = books.book_id WHERE lending.user_id = {$_SESSION['user_id']} AND lending.return_date IS NULL";
-        $user_books_result = mysqli_query($conn, $user_books_query);
-
-        while ($user_book = mysqli_fetch_assoc($user_books_result)) {
-            echo "Book: " . $user_book['title'] . "<br>";
-            echo '<form method="POST">
-                    <input type="hidden" name="lending_id" value="' . $user_book['lending_id'] . '">
-                    <button type="submit" name="return_book">Return Book</button>
-                  </form>';
-        }
-    }
-
-    echo '
-    <form method="POST">
-        <button type="submit" name="logout">Logout</button>
-    </form>';
+    echo "</body></html>";
 }
-?>
+
+
+
+
+
+
+if ($_SESSION['role'] == 'user') {
+    $user_id = $_SESSION['user_id'];
+
+    // User requests a book
+    if (isset($_POST['request_book'])) {
+        $book_id = $_POST['book_id'];
+
+        // Check if the user is suspended
+        $suspensionQuery = "SELECT * FROM suspensions WHERE user_id = $user_id AND suspended_until > NOW()";
+        $suspensionResult = mysqli_query($conn, $suspensionQuery);
+        if (mysqli_num_rows($suspensionResult) > 0) {
+            echo "Your account is suspended. You cannot borrow books.<br>";
+        } else {
+            // Check if the book is available
+            $bookQuery = "SELECT * FROM books WHERE book_id = $book_id AND available = 1";
+            $bookResult = mysqli_query($conn, $bookQuery);
+            if (mysqli_num_rows($bookResult) > 0) {
+                // Lend the book
+                $lendDate = date('Y-m-d');
+                $lendQuery = "INSERT INTO lending (user_id, book_id, lend_date) VALUES ($user_id, $book_id, '$lendDate')";
+                mysqli_query($conn, $lendQuery);
+
+                // Update book availability
+                $updateBookQuery = "UPDATE books SET available = 0 WHERE book_id = $book_id";
+                mysqli_query($conn, $updateBookQuery);
+
+                echo "Book requested successfully.<br>";
+            } else {
+                echo "This book is not available.<br>";
+            }
+        }
+    }
+
+    // User returns a book
+    if (isset($_POST['return_book'])) {
+        $lending_id = $_POST['lending_id'];
+
+        // Update the lending status to return the book
+        $returnQuery = "UPDATE lending SET return_date = NOW() WHERE lending_id = $lending_id";
+        if (mysqli_query($conn, $returnQuery)) {
+            // Update book availability after return
+            $bookIdQuery = "SELECT book_id FROM lending WHERE lending_id = $lending_id";
+            $bookResult = mysqli_query($conn, $bookIdQuery);
+            $book = mysqli_fetch_assoc($bookResult);
+            $book_id = $book['book_id'];
+            $updateBookQuery = "UPDATE books SET available = 1 WHERE book_id = $book_id";
+            mysqli_query($conn, $updateBookQuery);
+            echo "Book returned successfully.<br>";
+        } else {
+            echo "Failed to return the book.<br>";
+        }
+    }
+
+    // Get all genres from the database
+    $genres_query = "SELECT DISTINCT categories.name AS genre FROM books 
+    JOIN categories ON books.category_id = categories.category_id";
+    $genres_result = mysqli_query($conn, $genres_query);
+
+    // Handle form submission for filtering books based on selected genres
+    $selected_genres = [];
+    if (isset($_POST['filter'])) {
+        $selected_genres = $_POST['genres'] ?? []; // Get selected genres
+    }
+
+    // Handle search query
+    $search_query = '';
+    if (isset($_POST['search_books']) && !empty($_POST['search_books'])) {
+        $search_query = mysqli_real_escape_string($conn, $_POST['search_books']);
+    }
+
+    // Pagination logic for displaying books (5 books per page)
+    $limit = 5;
+    $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+    $offset = ($page - 1) * $limit;
+
+    // Filtered query based on genres and search
+    $where_clauses = [];
+    if ($search_query) {
+        $where_clauses[] = "title LIKE '%$search_query%'";
+    }
+    if (!empty($selected_genres)) {
+        $genres_list = implode("', '", $selected_genres);
+        $where_clauses[] = "category_id IN (SELECT category_id FROM categories WHERE name IN ('$genres_list'))";
+    }
+
+    $where_sql = '';
+    if (!empty($where_clauses)) {
+        $where_sql = "WHERE " . implode(" AND ", $where_clauses);
+    }
+
+    // Get the filtered books with pagination
+    $books_query = "SELECT * FROM books $where_sql LIMIT $limit OFFSET $offset";
+    $books_result = mysqli_query($conn, $books_query);
+
+    // Get the total number of books for pagination
+    $total_books_query = "SELECT COUNT(*) AS total FROM books $where_sql";
+    $total_books_result = mysqli_query($conn, $total_books_query);
+    $total_books = mysqli_fetch_assoc($total_books_result)['total'];
+    $total_pages = ceil($total_books / $limit);
+
+    // Get the list of books requested by the user (only those that haven't been returned yet)
+    $requested_books_query = "SELECT b.title, l.lending_id FROM lending l 
+                               JOIN books b ON l.book_id = b.book_id 
+                               WHERE l.user_id = $user_id AND l.return_date IS NULL";
+    $requested_books_result = mysqli_query($conn, $requested_books_query);
+
+    ?>
+
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>User Dashboard</title>
+        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+    </head>
+    <body>
+    <div class="container">
+        <div class="row">
+            <!-- Left Panel: Genres Filter -->
+            <div class="col-md-3">
+                <h3>Filter by Genre</h3>
+                <form method="POST">
+                    <ul class="list-group">
+                        <?php while ($genre = mysqli_fetch_assoc($genres_result)) : ?>
+                            <li class="list-group-item">
+                                <label>
+                                    <input type="checkbox" name="genres[]" value="<?= $genre['genre']; ?>" 
+                                           <?= in_array($genre['genre'], $selected_genres) ? 'checked' : ''; ?>>
+                                    <?= $genre['genre']; ?>
+                                </label>
+                            </li>
+                        <?php endwhile; ?>
+                    </ul>
+                    <button type="submit" name="filter" class="btn btn-primary mt-2">Filter</button>
+                </form>
+            </div>
+
+            <!-- Right Panel: Books List -->
+            <div class="col-md-9">
+                <h3>User Dashboard</h3>
+
+                <!-- Search Bar -->
+                <h4>Search for Books to Request</h4>
+                <form method="POST">
+                    <input type="text" name="search_books" placeholder="Search for books" value="<?= $search_query; ?>" class="form-control">
+                    <button type="submit" class="btn btn-primary mt-2">Search</button>
+                </form>
+
+                <h4>Available Books</h4>
+                <div>
+                    <?php if (mysqli_num_rows($books_result) > 0): ?>
+                        <?php while ($book = mysqli_fetch_assoc($books_result)): ?>
+                            <div class="d-flex justify-content-between">
+                                <strong><?= $book['title']; ?></strong>
+                                <?php if ($book['available'] == 1): ?>
+                                    <form method="POST" class="d-inline">
+                                        <input type="hidden" name="book_id" value="<?= $book['book_id']; ?>">
+                                        <button type="submit" name="request_book" class="btn btn-success btn-sm">Request Book</button>
+                                    </form>
+                                <?php else: ?>
+                                    <button class="btn btn-danger btn-sm" disabled>Booked Out</button>
+                                <?php endif; ?>
+                            </div>
+                            <hr>
+                        <?php endwhile; ?>
+                    <?php else: ?>
+                        <p>No books found</p>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Pagination -->
+                <div class="mt-3">
+                    <?php if ($page > 1): ?>
+                        <a href="?page=<?= $page - 1; ?>" class="btn btn-secondary">Previous</a>
+                    <?php endif; ?>
+
+                    <?php if ($page < $total_pages): ?>
+                        <a href="?page=<?= $page + 1; ?>" class="btn btn-secondary">Next</a>
+                    <?php endif; ?>
+                </div>
+
+                <hr>
+
+                <h4>Your Requested Books (Not Returned Yet)</h4>
+                <div>
+                    <?php if (mysqli_num_rows($requested_books_result) > 0): ?>
+                        <?php while ($requested_book = mysqli_fetch_assoc($requested_books_result)): ?>
+                            <div class="d-flex justify-content-between">
+                                <strong><?= $requested_book['title']; ?></strong>
+                                <form method="POST" class="d-inline">
+                                    <input type="hidden" name="lending_id" value="<?= $requested_book['lending_id']; ?>">
+                                    <button type="submit" name="return_book" class="btn btn-warning btn-sm">Return</button>
+                                </form>
+                            </div>
+                            <hr>
+                        <?php endwhile; ?>
+                    <?php else: ?>
+                        <p>You have no books that need to be returned.</p>
+                    <?php endif; ?>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS and dependencies -->
+    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
+
+    <!-- Logout Form -->
+    <form method="POST">
+        <button type="submit" name="logout" class="btn btn-danger mt-3">Logout</button>
+    </form>
+    </body>
+    </html>
+
+<?php 
+}
