@@ -5,23 +5,7 @@
     box-sizing: border-box;
 }
 
-.container {
-    display: flex;
-}
-.left-panel {
-    width: 25%;
-    padding-right: 20px;
-}
-.right-panel {
-    width: 75%;
-}
-.genre-list {
-    list-style-type: none;
-    padding: 0;
-}
-.genre-list li {
-    margin-bottom: 10px;
-}
+/* General Body Styling */
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background-color: #f4f7fc;
@@ -32,12 +16,23 @@ body {
 
 /* Container Styling */
 .container {
+    display: flex;
     max-width: 1200px;
     margin: auto;
     padding: 20px;
     background-color: #fff;
     border-radius: 10px;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+/* Left Panel and Right Panel */
+.left-panel {
+    width: 25%;
+    padding-right: 20px;
+}
+
+.right-panel {
+    width: 75%;
 }
 
 /* Typography */
@@ -146,6 +141,8 @@ button:disabled {
     grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
     gap: 20px;
     margin-top: 30px;
+    max-height: 500px;
+    overflow-y: auto;
 }
 
 .book-item {
@@ -174,7 +171,13 @@ button:disabled {
 .book-item button {
     margin-top: 15px;
     width: 100%;
-    padding: 12px;
+}
+
+/* Scrollable Container */
+.scrollable {
+    overflow-y: auto;
+    max-height: 80vh; /* Set the maximum height of scrollable areas */
+    padding-right: 10px; /* Add padding to prevent content from sticking to the scrollbar */
 }
 
 /* User Dashboard */
@@ -313,5 +316,22 @@ nav a:hover {
 
     .auth-section {
         padding: 30px;
+    }
+
+    .container {
+        flex-direction: column;
+    }
+
+    .left-panel {
+        width: 100%;
+        padding-right: 0;
+    }
+
+    .right-panel {
+        width: 100%;
+    }
+
+    .books-list {
+        grid-template-columns: 1fr 1fr;
     }
 }
