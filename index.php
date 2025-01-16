@@ -4,7 +4,7 @@ include 'db_connection.php';
 
 // Handle pagination
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-$limit = 5;
+$limit = 6;
 $offset = ($page - 1) * $limit;
 
 if (isset($_POST["logout"])) {
@@ -226,7 +226,7 @@ if ($_SESSION["role"] == 'admin') {
                 </nav>
             <?php } ?>
             <!-- Add New Book, Category, and Author Form -->
-            <div class="mt-4">
+            <div class="col-mt-4">
                 <h4>Add New Book</h4>
                 <form method="POST" enctype="multipart/form-data" class="form-inline mb-3">
                     <input type="text" name="book_title" placeholder="Book Title" class="form-control mr-2" required>
@@ -342,8 +342,8 @@ if ($_SESSION["role"] == 'admin') {
         $imagePath = $book['image'] ? 'img/books/' . $book['image'] : 'img/books/default.jpg';
     ?>
 
-    <div class="col-md-8 mb-8">
-        <div class="card" style="display: flex; flex-direction: column; height: 100%; border: 1px solid #ddd;">
+    <div class="col-md-4 mb-4">
+        <div class="card" style="height: 100%; border: 1px solid #ddd;">
             <!-- Larger Card Image -->
             <img src="<?php echo $imagePath; ?>" class="card-img-top" alt="<?php echo $book['title']; ?>" style="width: 100%; object-fit: cover;">
             
