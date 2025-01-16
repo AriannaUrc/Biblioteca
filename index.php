@@ -3,7 +3,7 @@ session_start();
 include 'db_connection.php';
 
 // Handle pagination
-$page = isset($_GET['page']) ? (int)$_GET['page'] : 1; // Default to page 1 if not set
+$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $limit = 5;
 $offset = ($page - 1) * $limit;
 
@@ -26,7 +26,7 @@ echo '<!DOCTYPE html>
     <title>Admin Panel</title>
     <!-- Bootstrap CSS -->
     <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="style.css"> <!-- Your custom styles -->
+    <link rel="stylesheet" href="style.css"> <!-- Custom styles -->
 </head>
 <body>';
 
@@ -69,7 +69,7 @@ if ($_SESSION["role"] == 'admin') {
             echo "Error: " . mysqli_error($conn);
         }
     }
-    
+
     if (isset($_GET['edit_book'])) {
         $book_id = (int)$_GET['edit_book'];
         $bookQuery = "SELECT * FROM books WHERE book_id = $book_id";
@@ -119,54 +119,50 @@ if ($_SESSION["role"] == 'admin') {
     }
 
     if (isset($_POST['update_book'])) {
-    $book_id = (int)$_GET['edit_book'];
-    $title = mysqli_real_escape_string($conn, $_POST['book_title']);
-    $author_id = (int)$_POST['author_id'];
-    $category_id = (int)$_POST['category_id'];
-    
-    // Handle image upload (only if a new image is provided)
-    $imagePath = NULL;
-    if (isset($_FILES['image']) && $_FILES['image']['error'] == 0) {
-        // Validate and upload the image (similar to the add book case)
-        $allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
-        if (in_array($_FILES['image']['type'], $allowedTypes)) {
-            $uploadDir = 'img/books/';
-            $uploadFile = $uploadDir . basename($_FILES['image']['name']);
-            
-            if (move_uploaded_file($_FILES['image']['tmp_name'], $uploadFile)) {
-                $imagePath = basename($_FILES['image']['name']);
+        $book_id = (int)$_GET['edit_book'];
+        $title = mysqli_real_escape_string($conn, $_POST['book_title']);
+        $author_id = (int)$_POST['author_id'];
+        $category_id = (int)$_POST['category_id'];
+        
+        // Handle image upload (only if a new image is provided)
+        $imagePath = NULL;
+        if (isset($_FILES['image']) && $_FILES['image']['error'] == 0) {
+            // Validate and upload the image (similar to the add book case)
+            $allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
+            if (in_array($_FILES['image']['type'], $allowedTypes)) {
+                $uploadDir = 'img/books/';
+                $uploadFile = $uploadDir . basename($_FILES['image']['name']);
+                
+                if (move_uploaded_file($_FILES['image']['tmp_name'], $uploadFile)) {
+                    $imagePath = basename($_FILES['image']['name']);
+                } else {
+                    echo "Failed to upload image.";
+                }
             } else {
-                echo "Failed to upload image.";
+                echo "Invalid file type.";
             }
+        }
+
+        // Update the book in the database, including the new image path if uploaded
+        $updateQuery = "UPDATE books SET title = '$title', author_id = $author_id, category_id = $category_id";
+        
+        if ($imagePath) {
+            $updateQuery .= ", image = '$imagePath'";
+        }
+
+        $updateQuery .= " WHERE book_id = $book_id";
+        
+        if (mysqli_query($conn, $updateQuery)) {
+            echo "Book updated successfully!";
         } else {
-            echo "Invalid file type.";
+            echo "Error: " . mysqli_error($conn);
         }
     }
 
-    // Update the book in the database, including the new image path if uploaded
-    $updateQuery = "UPDATE books SET title = '$title', author_id = $author_id, category_id = $category_id";
-    
-    if ($imagePath) {
-        $updateQuery .= ", image = '$imagePath'";
-    }
-
-    $updateQuery .= " WHERE book_id = $book_id";
-    
-    if (mysqli_query($conn, $updateQuery)) {
-        echo "Book updated successfully!";
-    } else {
-        echo "Error: " . mysqli_error($conn);
-    }
-    }
-
     ?>
-
-    
-
-    <!-- Admin Panel Content -->
     <div class="row">
         <!-- Left Panel: List of Users -->
-        <div class="col-md-3 mb-4">
+        <div class="col-md-3">
             <h4 class="text-center">Users</h4>
             <div class="list-group">
                 <?php
@@ -229,7 +225,6 @@ if ($_SESSION["role"] == 'admin') {
                     </ul>
                 </nav>
             <?php } ?>
-
             <!-- Add New Book, Category, and Author Form -->
             <div class="mt-4">
                 <h4>Add New Book</h4>
@@ -275,21 +270,18 @@ if ($_SESSION["role"] == 'admin') {
                     <input type="text" name="author_name" placeholder="Author Name" class="form-control mr-2" required>
                     <button type="submit" name="add_author" class="btn btn-primary">Add Author</button>
                 </form>
-            
-            </div>
         </div>
     </div>
-    <?php
+<?php
 } elseif ($_SESSION["role"] == 'user') {
-    // User Panel content (Book browsing, searching, borrowing)
-    ?>
+    // User panel content (book browsing, searching, borrowing)
+?>
     <h3>Welcome, <?php echo $_SESSION['username']; ?>!</h3>
 
-    <!-- Search Books Form -->
-    <form method="GET" class="mb-4">
+    <form method="GET" class="col-md-6 mb-4">
         <div class="form-row">
-            <div class="col-md-6">
-                <input type="text" name="search_books" class="form-control" placeholder="Search for books" value="<?php echo isset($_GET['search_books']) ? $_GET['search_books'] : ''; ?>">
+            <div class="col-md-8">
+                <input type="text" name="search_books" class="form-control" placeholder="Search for books">
             </div>
             <div class="col-md-4">
                 <button type="submit" class="btn btn-success">Search</button>
@@ -298,7 +290,7 @@ if ($_SESSION["role"] == 'admin') {
     </form>
 
     <!-- Genre Filter Form -->
-    <form method="GET" class="mb-4">
+    <form method="GET" class="col-mb-4">
         <div class="form-row">
             <div class="col-md-6">
                 <select name="genre" class="form-control">
@@ -322,14 +314,25 @@ if ($_SESSION["role"] == 'admin') {
     <?php
     // Book List Query (with optional search and genre filter)
     $genreFilter = isset($_GET['genre']) ? "AND category_id = " . (int)$_GET['genre'] : '';
+    //echo $genreFilter;
     $searchQuery = isset($_GET['search_books']) ? "AND title LIKE '%" . mysqli_real_escape_string($conn, $_GET['search_books']) . "%'" : '';
 
-    $booksQuery = "SELECT * FROM books WHERE 1 $genreFilter $searchQuery LIMIT $limit OFFSET $offset";
+    if(isset($_GET['genre'])){
+        if((int)$_GET['genre']!=0)
+        $booksQuery = "SELECT * FROM books WHERE 1 $genreFilter $searchQuery LIMIT $limit OFFSET $offset";
+        else
+        $booksQuery = "SELECT * FROM books WHERE 1 $searchQuery LIMIT $limit OFFSET $offset";
+    }
+    else{
+        $booksQuery = "SELECT * FROM books WHERE 1 $searchQuery LIMIT $limit OFFSET $offset";
+    }
+    
+
     $booksResult = mysqli_query($conn, $booksQuery);
     ?>
 
-<h4>Books</h4>
-<div class="row">
+    <h4>Books</h4>
+    <div class="row">
     <?php
     while ($book = mysqli_fetch_assoc($booksResult)) {
         // Check if the book is available
@@ -362,28 +365,25 @@ if ($_SESSION["role"] == 'admin') {
     <?php
     }
     ?>
-</div>
+    </div>
 
-
-    <!-- Pagination for Books -->
     <nav>
         <ul class="pagination">
             <?php
-            $totalBooksQuery = "SELECT COUNT(*) as total FROM books WHERE 1 $genreFilter $searchQuery";
-            $totalBooksResult = mysqli_query($conn, $totalBooksQuery);
-            $totalBooksRow = mysqli_fetch_assoc($totalBooksResult);
-            $totalBooks = $totalBooksRow['total'];
-            $totalPages = ceil($totalBooks / $limit);  // Calculate total pages
-            ?>
-            <?php if ($page > 1): ?>
-                <li class="page-item"><a class="page-link" href="?page=<?php echo $page - 1; ?>">Previous</a></li>
-            <?php endif; ?>
-            <?php if ($page < $totalPages): ?>
-                <li class="page-item"><a class="page-link" href="?page=<?php echo $page + 1; ?>">Next</a></li>
-            <?php endif; ?>
+                $totalBooksQuery = "SELECT COUNT(*) as total FROM books WHERE 1 $genreFilter $searchQuery";
+                $totalBooksResult = mysqli_query($conn, $totalBooksQuery);
+                $totalBooksRow = mysqli_fetch_assoc($totalBooksResult);
+                $totalBooks = $totalBooksRow['total'];
+                $totalPages = ceil($totalBooks / $limit);  // Calculate total pages
+                ?>
+                <?php if ($page > 1): ?>
+                    <li class="page-item"><a class="page-link" href="?page=<?php echo $page - 1; ?>">Previous</a></li>
+                <?php endif; ?>
+                <?php if ($page < $totalPages): ?>
+                    <li class="page-item"><a class="page-link" href="?page=<?php echo $page + 1; ?>">Next</a></li>
+                <?php endif; ?>
         </ul>
     </nav>
-
 
     <?php
     $username = $_SESSION['username']; // Fetch the username from session
@@ -411,6 +411,7 @@ if ($_SESSION["role"] == 'admin') {
     }
 
     // Fetch borrowed books (transactions) for the user
+    
     $transactionsQuery = "SELECT * FROM lending 
                           JOIN books ON lending.book_id = books.book_id 
                           WHERE lending.user_id = " . $userDetails['user_id'] . " AND lending.return_date IS NULL 
@@ -418,8 +419,10 @@ if ($_SESSION["role"] == 'admin') {
     
     $transactionsResult = mysqli_query($conn, $transactionsQuery);
 
+    //echo $transactionsQuery;
+
     if ($transactionsResult && mysqli_num_rows($transactionsResult) > 0) {
-        echo "<h4>Your Borrowed Books</h4>";
+        echo "<h4>Your Borrowed Books</h4><br><hr>";
         while ($transaction = mysqli_fetch_assoc($transactionsResult)) {
             echo "<strong>Book:</strong> " . $transaction['title'] . "<br>";
             echo "<strong>Lend Date:</strong> " . $transaction['lend_date'] . "<br>";
@@ -434,16 +437,15 @@ if ($_SESSION["role"] == 'admin') {
     }
 ?>
 
-
-<?php
-} ?>
+    <?php
+}
+?>
 
 <!-- Logout Form -->
 <form method="POST" class="mt-4">
     <button type="submit" name="logout" class="btn btn-danger">Logout</button>
 </form>
 
-<!-- Bootstrap JS -->
 <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.3/dist/umd/popper.min.js"></script>
 <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>

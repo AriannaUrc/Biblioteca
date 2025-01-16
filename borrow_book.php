@@ -28,7 +28,7 @@ if (isset($_GET['book_id'])) {
         // Borrow the book
         $lendDate = date('Y-m-d');
         $returnDate = NULL;
-        $insertLendingQuery = "INSERT INTO lending (user_id, book_id, lend_date, return_date) VALUES ($user_id, $book_id, '$lendDate', '$returnDate')";
+        $insertLendingQuery = "INSERT INTO lending (user_id, book_id, lend_date) VALUES ($user_id, $book_id, '$lendDate')";
         
         if (mysqli_query($conn, $insertLendingQuery)) {
             // Update the book to mark it as unavailable
