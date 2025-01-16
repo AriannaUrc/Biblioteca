@@ -345,12 +345,23 @@ if ($_SESSION["role"] == 'admin') {
     <div class="col-md-8 mb-8">
         <div class="card" style="display: flex; flex-direction: column; height: 100%; border: 1px solid #ddd;">
             <!-- Larger Card Image -->
-            <img src="<?php echo $imagePath; ?>" class="card-img-top" alt="<?php echo $book['title']; ?>" style="width: 100%; height: 200px; object-fit: cover;">
+            <img src="<?php echo $imagePath; ?>" class="card-img-top" alt="<?php echo $book['title']; ?>" style="width: 100%; object-fit: cover;">
             
             <!-- Card Body -->
             <div class="card-body">
                 <h5 class="card-title" style="font-size: 1.25rem;"><?php echo $book['title']; ?></h5>
-                <p class="card-text" style="font-size: 1rem;">Genre: <?php echo $book['category_id']; ?></p>
+                <p class="card-text" style="font-size: 1rem;">Genre: <?php 
+
+                $categoriesQuery = "SELECT * FROM categories WHERE category_id = ".$book['category_id'];
+                $categoriesResult = mysqli_query($conn, $categoriesQuery);
+
+                while ($category = mysqli_fetch_assoc($categoriesResult)) {
+                    echo $category['name'];
+                }
+
+                //echo $book['category_id']; 
+                
+                ?></p>
                 
                 <!-- Display Borrow Button if Book is Available -->
                 <?php if ($available): ?>
