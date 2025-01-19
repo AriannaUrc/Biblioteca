@@ -34,35 +34,36 @@ echo '<div class="container mt-4">';
 
 if ($_SESSION["role"] == 'admin') {
 
+    // Add Book Logic
     if (isset($_POST['add_book'])) {
         // Get the form data
         $title = mysqli_real_escape_string($conn, $_POST['book_title']);
         $author_id = (int)$_POST['author_id'];
         $category_id = (int)$_POST['category_id'];
         
-        // Handle image upload
+        // Handle image upload and save as base64
         $imagePath = NULL; // Default if no image is uploaded
+        $imageContent = NULL; // Default if no base64 image is uploaded
+
         if (isset($_FILES['image']) && $_FILES['image']['error'] == 0) {
             // Validate the uploaded image (optional checks like file type, size)
-            $allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
+            $allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
             if (in_array($_FILES['image']['type'], $allowedTypes)) {
-                $uploadDir = 'img/books/'; // Directory to store images
-                $uploadFile = $uploadDir . basename($_FILES['image']['name']);
-                
-                // Move the uploaded file to the target directory
-                if (move_uploaded_file($_FILES['image']['tmp_name'], $uploadFile)) {
-                    $imagePath = basename($_FILES['image']['name']);
-                } else {
-                    echo "Failed to upload image.";
-                }
+                // Convert image to base64
+                $imageData = file_get_contents($_FILES['image']['tmp_name']);
+                $imageContent = base64_encode($imageData); // Base64 content for database
+
+                // Save the image file path on the server (this is what goes in 'image' column)
+                $imagePath = 'img/books/' . basename($_FILES['image']['name']);
+                move_uploaded_file($_FILES['image']['tmp_name'], $imagePath); // Save image to the server
             } else {
-                echo "Invalid file type. Only JPG, PNG, and GIF are allowed.";
+                echo "Invalid file type. Only JPEG, PNG, and JPG are allowed.";
             }
         }
-    
-        // Insert the book into the database (including image path if uploaded)
-        $query = "INSERT INTO books (title, author_id, category_id, image) 
-                  VALUES ('$title', $author_id, $category_id, '$imagePath')";
+
+        // Insert the book into the database (including base64 encoded image in `image_cnt` and image path in `image`)
+        $query = "INSERT INTO books (title, author_id, category_id, image_cnt) 
+                VALUES ('$title', $author_id, $category_id, '$imageContent')";
         if (mysqli_query($conn, $query)) {
             echo "Book added successfully!";
         } else {
@@ -70,94 +71,6 @@ if ($_SESSION["role"] == 'admin') {
         }
     }
 
-    if (isset($_GET['edit_book'])) {
-        $book_id = (int)$_GET['edit_book'];
-        $bookQuery = "SELECT * FROM books WHERE book_id = $book_id";
-        $bookResult = mysqli_query($conn, $bookQuery);
-        $book = mysqli_fetch_assoc($bookResult);
-        if ($book) {
-            // Pre-populate form with existing book data
-            ?>
-            <h4>Edit Book</h4>
-            <form method="POST" enctype="multipart/form-data" class="form-inline mb-3">
-                <input type="text" name="book_title" placeholder="Book Title" value="<?php echo htmlspecialchars($book['title']); ?>" class="form-control mr-2" required>
-                
-                <select name="author_id" class="form-control mr-2" required>
-                    <option value="">Select Author</option>
-                    <?php
-                    $authors = mysqli_query($conn, "SELECT * FROM authors");
-                    while ($author = mysqli_fetch_assoc($authors)) {
-                        $selected = ($book['author_id'] == $author['author_id']) ? 'selected' : '';
-                        echo "<option value='" . $author['author_id'] . "' $selected>" . $author['name'] . "</option>";
-                    }
-                    ?>
-                </select>
-
-                <select name="category_id" class="form-control mr-2" required>
-                    <option value="">Select Category</option>
-                    <?php
-                    $categories = mysqli_query($conn, "SELECT * FROM categories");
-                    while ($category = mysqli_fetch_assoc($categories)) {
-                        $selected = ($book['category_id'] == $category['category_id']) ? 'selected' : '';
-                        echo "<option value='" . $category['category_id'] . "' $selected>" . $category['name'] . "</option>";
-                    }
-                    ?>
-                </select>
-
-                <!-- Current Image -->
-                <?php if ($book['image']): ?>
-                    <p><strong>Current Image:</strong> <img src="img/books/<?php echo $book['image']; ?>" width="100"></p>
-                <?php endif; ?>
-
-                <!-- Add Image Upload for New Image -->
-                <input type="file" name="image" class="form-control mr-2">
-
-                <button type="submit" name="update_book" class="btn btn-primary">Update Book</button>
-            </form>
-            <?php
-        }
-    }
-
-    if (isset($_POST['update_book'])) {
-        $book_id = (int)$_GET['edit_book'];
-        $title = mysqli_real_escape_string($conn, $_POST['book_title']);
-        $author_id = (int)$_POST['author_id'];
-        $category_id = (int)$_POST['category_id'];
-        
-        // Handle image upload (only if a new image is provided)
-        $imagePath = NULL;
-        if (isset($_FILES['image']) && $_FILES['image']['error'] == 0) {
-            // Validate and upload the image (similar to the add book case)
-            $allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
-            if (in_array($_FILES['image']['type'], $allowedTypes)) {
-                $uploadDir = 'img/books/';
-                $uploadFile = $uploadDir . basename($_FILES['image']['name']);
-                
-                if (move_uploaded_file($_FILES['image']['tmp_name'], $uploadFile)) {
-                    $imagePath = basename($_FILES['image']['name']);
-                } else {
-                    echo "Failed to upload image.";
-                }
-            } else {
-                echo "Invalid file type.";
-            }
-        }
-
-        // Update the book in the database, including the new image path if uploaded
-        $updateQuery = "UPDATE books SET title = '$title', author_id = $author_id, category_id = $category_id";
-        
-        if ($imagePath) {
-            $updateQuery .= ", image = '$imagePath'";
-        }
-
-        $updateQuery .= " WHERE book_id = $book_id";
-        
-        if (mysqli_query($conn, $updateQuery)) {
-            echo "Book updated successfully!";
-        } else {
-            echo "Error: " . mysqli_error($conn);
-        }
-    }
 
     ?>
     <div class="row">
@@ -338,8 +251,13 @@ if ($_SESSION["role"] == 'admin') {
         // Check if the book is available
         $available = $book['available'] ? true : false;
 
-        // Set a default image if no image is available
-        $imagePath = $book['image'] ? 'img/books/' . $book['image'] : 'img/books/default.jpg';
+        // Check if image content is available, if not use default image
+        if ($book['image_cnt']) {
+            // Create the data URI for base64 image
+            $imagePath = 'data:image/jpeg;base64,' . $book['image_cnt'];  // Assuming the image is JPEG
+        } else {
+            $imagePath = 'img/books/default.jpg';  // Fallback default image if no image found
+        }
     ?>
 
     <div class="col-md-4 mb-4">
