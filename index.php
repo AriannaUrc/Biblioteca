@@ -32,7 +32,116 @@ echo '<!DOCTYPE html>
 
 echo '<div class="container mt-4">';
 
+if (isset($_POST['search_book_to_update'])) {
+    // Get the book title from the search
+    $book_title_to_update = mysqli_real_escape_string($conn, $_POST['book_title_to_update']);
+
+    // Fetch book details from the database
+    $searchQuery = "SELECT * FROM books WHERE title LIKE '%$book_title_to_update%'";
+    $searchResult = mysqli_query($conn, $searchQuery);
+
+    if (mysqli_num_rows($searchResult) > 0) {
+        // Fetch the first matching book
+        $book = mysqli_fetch_assoc($searchResult);
+        
+        // Store the book details in session
+        $_SESSION['book_to_update'] = $book;
+
+        // Display book details in an editable form
+        echo '<h4>Edit Book: ' . $book['title'] . '</h4>';
+        echo '<form method="POST" enctype="multipart/form-data" class="form-inline mb-3">';
+        echo '<input type="text" name="updated_book_title" value="' . $book['title'] . '" class="form-control mr-2" required>';
+        
+        echo '<select name="updated_author_id" class="form-control mr-2" required>';
+        echo '<option value="">Select Author</option>';
+        $authorsQuery = "SELECT * FROM authors";
+        $authorsResult = mysqli_query($conn, $authorsQuery);
+        while ($author = mysqli_fetch_assoc($authorsResult)) {
+            $selected = ($author['author_id'] == $book['author_id']) ? 'selected' : '';
+            echo "<option value='" . $author['author_id'] . "' $selected>" . $author['name'] . "</option>";
+        }
+        echo '</select>';
+        
+        echo '<select name="updated_category_id" class="form-control mr-2" required>';
+        echo '<option value="">Select Category</option>';
+        $categoriesQuery = "SELECT * FROM categories";
+        $categoriesResult = mysqli_query($conn, $categoriesQuery);
+        while ($category = mysqli_fetch_assoc($categoriesResult)) {
+            $selected = ($category['category_id'] == $book['category_id']) ? 'selected' : '';
+            echo "<option value='" . $category['category_id'] . "' $selected>" . $category['name'] . "</option>";
+        }
+        echo '</select>';
+
+        // Show the existing image (or default image if none exists)
+        if ($book['image_cnt']) {
+            echo '<img src="data:image/jpeg;base64,' . $book['image_cnt'] . '" class="img-thumbnail mb-2" style="width: 100px; height: 100px;" />';
+        } else {
+            echo '<img src="img/books/default.jpg" class="img-thumbnail mb-2" style="width: 100px; height: 100px;" />';
+        }
+
+        echo '<input type="file" name="updated_image" class="form-control mr-2">';
+        echo '<button type="submit" name="update_book" class="btn btn-primary">Update Book</button>';
+        echo '</form>';
+    } else {
+        echo "<p>No book found with the title '$book_title_to_update'.</p>";
+    }
+}
+
+
+if ($_SESSION["role"] == 'admin' && isset($_POST['update_book'])) {
+    // Retrieve the book details from session
+    if (isset($_SESSION['book_to_update'])) {
+        $book = $_SESSION['book_to_update'];
+
+        // Get the updated book details
+        $updated_book_title = mysqli_real_escape_string($conn, $_POST['updated_book_title']);
+        $updated_author_id = (int)$_POST['updated_author_id'];
+        $updated_category_id = (int)$_POST['updated_category_id'];
+
+        // Handle the image upload and save as base64 (if new image is uploaded)
+        $updated_image_content = NULL; // Default if no image is uploaded
+        if (isset($_FILES['updated_image']) && $_FILES['updated_image']['error'] == 0) {
+            $allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+            if (in_array($_FILES['updated_image']['type'], $allowedTypes)) {
+                // Convert the image to base64
+                $imageData = file_get_contents($_FILES['updated_image']['tmp_name']);
+                $updated_image_content = base64_encode($imageData); // Base64 image content for database
+            } else {
+                echo "Invalid image file type. Only JPEG, PNG, and JPG are allowed.";
+            }
+        }
+
+        // Update the book details in the database
+        $updateQuery = "UPDATE books SET title = '$updated_book_title', author_id = $updated_author_id, category_id = $updated_category_id";
+        if ($updated_image_content) {
+            $updateQuery .= ", image_cnt = '$updated_image_content'";
+        }
+        $updateQuery .= " WHERE book_id = " . $book['book_id']; // Assuming we know the book_id from the session
+
+        if (mysqli_query($conn, $updateQuery)) {
+            echo "Book updated successfully!";
+        } else {
+            echo "Error: " . mysqli_error($conn);
+        }
+
+        // Clear the session data after the update
+        unset($_SESSION['book_to_update']);
+    } else {
+        echo "Error: Book not found in session.";
+    }
+}
+
+
+
+
+
 if ($_SESSION["role"] == 'admin') {
+
+    echo '<h4>Update Book</h4>';
+    echo '<form method="POST" class="form-inline mb-3">';
+    echo '<input type="text" name="book_title_to_update" placeholder="Enter Book Title to Modify" class="form-control mr-2" required>';
+    echo '<button type="submit" name="search_book_to_update" class="btn btn-warning">Search</button>';
+    echo '</form>';
 
     // Add Book Logic
     if (isset($_POST['add_book'])) {
@@ -70,9 +179,9 @@ if ($_SESSION["role"] == 'admin') {
             echo "Error: " . mysqli_error($conn);
         }
     }
+?>
 
-
-    ?>
+    
     <div class="row">
         <!-- Left Panel: List of Users -->
         <div class="col-md-3">
