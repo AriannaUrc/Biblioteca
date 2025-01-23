@@ -73,8 +73,8 @@ if (isset($_POST['search_book_to_update'])) {
         echo '</select>';
 
         // Show the existing image (or default image if none exists)
-        if ($book['image_cnt']) {
-            echo '<img src="data:image/jpeg;base64,' . $book['image_cnt'] . '" class="img-thumbnail mb-2" style="width: 100px; height: 100px;" />';
+        if ($book['image']) {
+            echo '<img src="img_books/' . $book['image'] . '" class="img-thumbnail mb-2" style="width: 100px; height: 100px;" />';
         } else {
             echo '<img src="img/books/default.jpg" class="img-thumbnail mb-2" style="width: 100px; height: 100px;" />';
         }
@@ -98,25 +98,31 @@ if ($_SESSION["role"] == 'admin' && isset($_POST['update_book'])) {
         $updated_author_id = (int)$_POST['updated_author_id'];
         $updated_category_id = (int)$_POST['updated_category_id'];
 
-        // Handle the image upload and save as base64 (if new image is uploaded)
-        $updated_image_content = NULL; // Default if no image is uploaded
+        // Handle the image upload and save the image file path (for update)
+        $updated_image_path = NULL; // Default if no image is uploaded
+
         if (isset($_FILES['updated_image']) && $_FILES['updated_image']['error'] == 0) {
+            // Validate the uploaded image (optional checks like file type, size)
             $allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
             if (in_array($_FILES['updated_image']['type'], $allowedTypes)) {
-                // Convert the image to base64
-                $imageData = file_get_contents($_FILES['updated_image']['tmp_name']);
-                $updated_image_content = base64_encode($imageData); // Base64 image content for database
+                // Get the file extension and generate a unique file name
+                $imageExtension = pathinfo($_FILES['updated_image']['name'], PATHINFO_EXTENSION);
+                $imageName = basename($_FILES['updated_image']['name']);
+                
+                // Move the uploaded image to the 'img_books' folder
+                $updated_image_path = 'img_books/' . $imageName;
+                move_uploaded_file($_FILES['updated_image']['tmp_name'], $updated_image_path); // Save image to the server
             } else {
-                echo "Invalid image file type. Only JPEG, PNG, and JPG are allowed.";
+                echo "Invalid file type. Only JPEG, PNG, and JPG are allowed.";
             }
         }
 
-        // Update the book details in the database
+        // Update the book record with the new image path (if updated image exists)
         $updateQuery = "UPDATE books SET title = '$updated_book_title', author_id = $updated_author_id, category_id = $updated_category_id";
-        if ($updated_image_content) {
-            $updateQuery .= ", image_cnt = '$updated_image_content'";
+        if ($updated_image_path) {
+            $updateQuery .= ", image = '$imageName'";
         }
-        $updateQuery .= " WHERE book_id = " . $book['book_id']; // Assuming we know the book_id from the session
+        $updateQuery .= " WHERE book_id = " . $book['book_id'];
 
         if (mysqli_query($conn, $updateQuery)) {
             echo "Book updated successfully!";
@@ -150,29 +156,29 @@ if ($_SESSION["role"] == 'admin') {
         $author_id = (int)$_POST['author_id'];
         $category_id = (int)$_POST['category_id'];
         
-        // Handle image upload and save as base64
+        // Handle image upload and save the image file path in the database
         $imagePath = NULL; // Default if no image is uploaded
-        $imageContent = NULL; // Default if no base64 image is uploaded
 
         if (isset($_FILES['image']) && $_FILES['image']['error'] == 0) {
             // Validate the uploaded image (optional checks like file type, size)
             $allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
             if (in_array($_FILES['image']['type'], $allowedTypes)) {
-                // Convert image to base64
-                $imageData = file_get_contents($_FILES['image']['tmp_name']);
-                $imageContent = base64_encode($imageData); // Base64 content for database
-
-                // Save the image file path on the server (this is what goes in 'image' column)
-                $imagePath = 'img/books/' . basename($_FILES['image']['name']);
+                // Get the file extension and generate a unique file name
+                $imageExtension = pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION);
+                $imageName = basename($_FILES['image']['name']);
+                
+                // Move the uploaded image to the 'img_books' folder
+                $imagePath = 'img_books/' . $imageName;
                 move_uploaded_file($_FILES['image']['tmp_name'], $imagePath); // Save image to the server
             } else {
                 echo "Invalid file type. Only JPEG, PNG, and JPG are allowed.";
             }
         }
 
-        // Insert the book into the database (including base64 encoded image in `image_cnt` and image path in `image`)
-        $query = "INSERT INTO books (title, author_id, category_id, image_cnt) 
-                VALUES ('$title', $author_id, $category_id, '$imageContent')";
+        // Insert the book into the database with the image file path
+        $query = "INSERT INTO books (title, author_id, category_id, image) 
+                VALUES ('$title', $author_id, $category_id, '$imageName')";
+                
         if (mysqli_query($conn, $query)) {
             echo "Book added successfully!";
         } else {
@@ -360,13 +366,9 @@ if ($_SESSION["role"] == 'admin') {
         // Check if the book is available
         $available = $book['available'] ? true : false;
 
-        // Check if image content is available, if not use default image
-        if ($book['image_cnt']) {
-            // Create the data URI for base64 image
-            $imagePath = 'data:image/jpeg;base64,' . $book['image_cnt'];  // Assuming the image is JPEG
-        } else {
-            $imagePath = 'img/books/default.jpg';  // Fallback default image if no image found
-        }
+        // Check if the book has an image path stored, if not, use the default image
+        $imagePath = $book['image'] ? "img_books/".$book['image'] : 'img_books/default.jpg';
+
     ?>
 
     <div class="col-md-4 mb-4">
